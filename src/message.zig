@@ -2,9 +2,9 @@
 pub const Message = struct {
     version: Version,
     method: Method,
-    uri: []u8,
+    uri: []const u8,
     headers: []Header,
-    body: []u8,
+    body: []const u8,
 };
 
 /// HTTP method
@@ -21,6 +21,6 @@ const Version = enum {
 
 /// HTTP header
 const Header = struct {
-    name: []u8,
-    value: []u8,
+    name: []const u8,
+    value: []const u8,
 };
