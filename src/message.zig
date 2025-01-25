@@ -3,7 +3,7 @@ pub const Message = struct {
     version: Version,
     method: Method,
     uri: []const u8,
-    headers: []Header,
+    headers: []const Header,
     body: []const u8,
 };
 
