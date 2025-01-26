@@ -28,22 +28,22 @@ pub const Message = struct {
         }
         const slc = try allocator.alloc(u8, request_line_len + headers_len + self.body.len);
 
-        @memcpy(slc[0..method.len], method[0..]);
+        @memcpy(slc[0..method.len], method);
         slc[method.len] = ' ';
         @memcpy(slc[method.len + 1 .. method.len + 1 + self.uri.len], self.uri);
         slc[method.len + 1 + self.uri.len] = ' ';
         @memcpy(
             slc[method.len + 1 + self.uri.len + 1 .. method.len + 1 + self.uri.len + 1 + HTTP_STR.len],
-            HTTP_STR[0..],
+            HTTP_STR,
         );
         slc[method.len + 1 + self.uri.len + 1 + HTTP_STR.len] = '/';
         @memcpy(
             slc[method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 .. method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len],
-            version[0..],
+            version,
         );
         @memcpy(
             slc[method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len .. method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len],
-            CLRF[0..],
+            CLRF,
         );
 
         const headers_start = request_line_len;
@@ -55,7 +55,7 @@ pub const Message = struct {
             );
             @memcpy(
                 slc[headers_start + line_start + header.name.len .. headers_start + line_start + header.name.len + COLON_SPACE.len],
-                COLON_SPACE[0..],
+                COLON_SPACE,
             );
             @memcpy(
                 slc[headers_start + line_start + header.name.len + COLON_SPACE.len .. headers_start + line_start + header.name.len + COLON_SPACE.len + header.value.len],
@@ -63,7 +63,7 @@ pub const Message = struct {
             );
             @memcpy(
                 slc[headers_start + line_start + header.name.len + COLON_SPACE.len + header.value.len .. headers_start + line_start + header.name.len + COLON_SPACE.len + header.value.len + CLRF.len],
-                CLRF[0..],
+                CLRF,
             );
             const len = header.name.len + COLON_SPACE.len + header.value.len + CLRF.len;
             line_start += len;
@@ -114,9 +114,9 @@ test "serialise GET request message" {
     var expected_data: [79]u8 = undefined;
     var request_line: [REQUEST_LINE_LEN]u8 = undefined;
     var header_lines: [HEADER_LINES_LEN]u8 = undefined;
-    @memcpy(request_line[0..4], ("GET" ++ " ")[0..]);
-    @memcpy(request_line[4 .. 4 + uri.len + 1], (uri ++ " ")[0..]);
-    @memcpy(request_line[4 + uri.len + 1 .. 4 + uri.len + 1 + 10], ("HTTP/1.1" ++ CLRF)[0..]);
+    @memcpy(request_line[0..4], "GET" ++ " ");
+    @memcpy(request_line[4 .. 4 + uri.len + 1], uri ++ " ");
+    @memcpy(request_line[4 + uri.len + 1 .. 4 + uri.len + 1 + 10], "HTTP/1.1" ++ CLRF);
     @memcpy(expected_data[0..request_line.len], &request_line);
 
     var start: usize = 0;
@@ -125,12 +125,12 @@ test "serialise GET request message" {
         var line = try allocator.alloc(u8, len);
         defer allocator.free(line);
         @memcpy(line[0..header.name.len], header.name);
-        @memcpy(line[header.name.len .. header.name.len + COLON_SPACE.len], COLON_SPACE[0..]);
+        @memcpy(line[header.name.len .. header.name.len + COLON_SPACE.len], COLON_SPACE);
         @memcpy(
             line[header.name.len + COLON_SPACE.len .. header.name.len + COLON_SPACE.len + header.value.len],
             header.value,
         );
-        @memcpy(line[header.name.len + COLON_SPACE.len + header.value.len ..], CLRF[0..]);
+        @memcpy(line[header.name.len + COLON_SPACE.len + header.value.len ..], CLRF);
         @memcpy(header_lines[start .. start + line.len], line);
         start += line.len;
     }
