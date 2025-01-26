@@ -134,7 +134,7 @@ test "serialise GET request message" {
         @memcpy(header_lines[start .. start + line.len], line);
         start += line.len;
     }
-    @memcpy(expected_data[REQUEST_LINE_LEN..], header_lines[0..]);
+    @memcpy(expected_data[REQUEST_LINE_LEN..], &header_lines);
 
     const data = try msg.serialise(allocator);
     defer allocator.free(data);
