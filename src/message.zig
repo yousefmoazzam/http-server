@@ -124,12 +124,10 @@ test "serialise GET request message" {
     const REQUEST_LINE_LEN = 23;
     const HEADER_LINES_LEN = 56;
     var expected_data: [79]u8 = undefined;
-    var request_line: [REQUEST_LINE_LEN]u8 = undefined;
     var header_lines: [HEADER_LINES_LEN]u8 = undefined;
-    @memcpy(request_line[0..4], "GET" ++ " ");
-    @memcpy(request_line[4 .. 4 + uri.len + 1], uri ++ " ");
-    @memcpy(request_line[4 + uri.len + 1 .. 4 + uri.len + 1 + 10], "HTTP/1.1" ++ CLRF);
-    @memcpy(expected_data[0..request_line.len], &request_line);
+    @memcpy(expected_data[0..4], "GET" ++ " ");
+    @memcpy(expected_data[4 .. 4 + uri.len + 1], uri ++ " ");
+    @memcpy(expected_data[4 + uri.len + 1 .. 4 + uri.len + 1 + 10], "HTTP/1.1" ++ CLRF);
 
     var start: usize = 0;
     for (headers) |header| {
