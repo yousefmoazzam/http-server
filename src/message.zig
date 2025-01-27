@@ -20,13 +20,19 @@ pub const Message = struct {
         };
         const method = switch (self.method) {
             .GET => "GET",
+            .POST => "POST",
         };
         const request_line_len = method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len;
         var headers_len: usize = 0;
         for (self.headers) |header| {
             headers_len += header.name.len + COLON_SPACE.len + header.value.len + CLRF.len;
         }
-        const slc = try allocator.alloc(u8, request_line_len + headers_len + self.body.len);
+        var msg_len = request_line_len + headers_len + self.body.len;
+        if (self.body.len > 0) {
+            // Account for newline character that needs to be inserted between headers and body
+            msg_len += 1;
+        }
+        const slc = try allocator.alloc(u8, msg_len);
 
         @memcpy(slc[0..method.len], method);
         slc[method.len] = ' ';
@@ -69,6 +75,11 @@ pub const Message = struct {
             line_start += len;
         }
 
+        if (self.body.len > 0) {
+            slc[headers_start + line_start] = '\n';
+            @memcpy(slc[headers_start + line_start + 1 ..], self.body);
+        }
+
         return slc;
     }
 };
@@ -76,6 +87,7 @@ pub const Message = struct {
 /// HTTP method
 const Method = enum {
     GET,
+    POST,
 };
 
 /// HTTP protocol version
@@ -135,6 +147,56 @@ test "serialise GET request message" {
         start += line.len;
     }
     @memcpy(expected_data[REQUEST_LINE_LEN..], &header_lines);
+
+    const data = try msg.serialise(allocator);
+    defer allocator.free(data);
+    try std.testing.expectEqualSlices(u8, expected_data[0..], data);
+}
+
+test "serialise POST request message with non-empty body" {
+    const allocator = std.testing.allocator;
+    const version = Version.V1_1;
+    const method = Method.POST;
+    const uri = "/users";
+    const headers = [3]Header{
+        Header{ .name = "Host", .value = "example.com" },
+        Header{ .name = "Content-Type", .value = "application/x-www-form-urlencoded" },
+        Header{ .name = "Content-Length", .value = "50" },
+    };
+    const body = "name=FirstName%20LastName&email=bsmth%40example.com";
+    const msg = Message{
+        .version = version,
+        .method = method,
+        .uri = uri,
+        .headers = headers[0..],
+        .body = body,
+    };
+    const REQUEST_LINE_LEN = 22;
+    const HEADER_LINES_LEN = 88;
+    var expected_data: [REQUEST_LINE_LEN + HEADER_LINES_LEN + 1 + body.len]u8 = undefined;
+    var header_lines: [HEADER_LINES_LEN]u8 = undefined;
+    @memcpy(expected_data[0..5], "POST" ++ " ");
+    @memcpy(expected_data[5 .. 5 + uri.len + 1], uri ++ " ");
+    @memcpy(expected_data[5 + uri.len + 1 .. 5 + uri.len + 1 + 10], "HTTP/1.1" ++ CLRF);
+
+    var start: usize = 0;
+    for (headers) |header| {
+        const len = header.name.len + COLON_SPACE.len + header.value.len + CLRF.len;
+        var line = try allocator.alloc(u8, len);
+        defer allocator.free(line);
+        @memcpy(line[0..header.name.len], header.name);
+        @memcpy(line[header.name.len .. header.name.len + COLON_SPACE.len], COLON_SPACE);
+        @memcpy(
+            line[header.name.len + COLON_SPACE.len .. header.name.len + COLON_SPACE.len + header.value.len],
+            header.value,
+        );
+        @memcpy(line[header.name.len + COLON_SPACE.len + header.value.len ..], CLRF);
+        @memcpy(header_lines[start .. start + line.len], line);
+        start += line.len;
+    }
+    @memcpy(expected_data[REQUEST_LINE_LEN .. REQUEST_LINE_LEN + HEADER_LINES_LEN], &header_lines);
+    expected_data[REQUEST_LINE_LEN + HEADER_LINES_LEN] = '\n';
+    @memcpy(expected_data[REQUEST_LINE_LEN + HEADER_LINES_LEN + 1 ..], body);
 
     const data = try msg.serialise(allocator);
     defer allocator.free(data);
