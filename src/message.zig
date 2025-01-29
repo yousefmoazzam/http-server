@@ -93,19 +93,17 @@ pub const Message = struct {
     pub fn deserialise(allocator: std.mem.Allocator, reader: std.io.AnyReader) (DeserialiseError || anyerror)!Message {
         const request_line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100) orelse return DeserialiseError.EmptyRequestLine;
         defer allocator.free(request_line);
-        if (!validate_request_line(request_line)) {
-            return DeserialiseError.InvalidRequestLine;
-        }
+        try validate_request_line(request_line);
         std.debug.panic("TODO", .{});
     }
 
-    fn validate_request_line(data: []const u8) bool {
+    fn validate_request_line(data: []const u8) DeserialiseError!void {
         var len: usize = 0;
         var iter = std.mem.splitSequence(u8, data, " ");
         while (iter.next()) |_| {
             len += 1;
         }
-        if (len != 3) return false;
+        if (len != 3) return DeserialiseError.InvalidRequestLine;
         std.debug.panic("TODO", .{});
     }
 };
