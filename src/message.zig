@@ -105,7 +105,7 @@ pub const Message = struct {
         while (iter.next()) |_| {
             len += 1;
         }
-        if (len < 3) return false;
+        if (len != 3) return false;
         std.debug.panic("TODO", .{});
     }
 };
@@ -239,6 +239,15 @@ test "return error if request line is empty" {
 test "return error if request line contains less than three values" {
     const allocator = std.testing.allocator;
     const data = "GET /users\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.InvalidRequestLine, ret);
+}
+
+test "return error if request line contains more than three values" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1 Foo\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
