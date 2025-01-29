@@ -7,6 +7,7 @@ const HTTP_STR = "HTTP";
 /// Errors that can occur when deserialising data to `Message`
 const DeserialiseError = error{
     EmptyRequestLine,
+    InvalidRequestLine,
 };
 
 /// HTTP message
@@ -90,9 +91,22 @@ pub const Message = struct {
 
     /// Deserialise data from `reader` into `Message`
     pub fn deserialise(allocator: std.mem.Allocator, reader: std.io.AnyReader) (DeserialiseError || anyerror)!Message {
-        if (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100)) |_| {
-            unreachable;
-        } else return DeserialiseError.EmptyRequestLine;
+        const request_line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100) orelse return DeserialiseError.EmptyRequestLine;
+        defer allocator.free(request_line);
+        if (!validate_request_line(request_line)) {
+            return DeserialiseError.InvalidRequestLine;
+        }
+        std.debug.panic("TODO", .{});
+    }
+
+    fn validate_request_line(data: []const u8) bool {
+        var len: usize = 0;
+        var iter = std.mem.splitSequence(u8, data, " ");
+        while (iter.next()) |_| {
+            len += 1;
+        }
+        if (len < 3) return false;
+        std.debug.panic("TODO", .{});
     }
 };
 
@@ -220,4 +234,13 @@ test "return error if request line is empty" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.EmptyRequestLine, ret);
+}
+
+test "return error if request line contains less than three values" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.InvalidRequestLine, ret);
 }
