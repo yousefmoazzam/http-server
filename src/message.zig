@@ -4,6 +4,11 @@ const CLRF = "\r\n";
 const COLON_SPACE = ": ";
 const HTTP_STR = "HTTP";
 
+/// Errors that can occur when deserialising data to `Message`
+const DeserialiseError = error{
+    EmptyRequestLine,
+};
+
 /// HTTP message
 pub const Message = struct {
     version: Version,
@@ -81,6 +86,13 @@ pub const Message = struct {
         }
 
         return slc;
+    }
+
+    /// Deserialise data from `reader` into `Message`
+    pub fn deserialise(allocator: std.mem.Allocator, reader: std.io.AnyReader) (DeserialiseError || anyerror)!Message {
+        if (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100)) |_| {
+            unreachable;
+        } else return DeserialiseError.EmptyRequestLine;
     }
 };
 
@@ -199,4 +211,13 @@ test "serialise POST request message with non-empty body" {
     const data = try msg.serialise(allocator);
     defer allocator.free(data);
     try std.testing.expectEqualSlices(u8, expected_data[0..], data);
+}
+
+test "return error if request line is empty" {
+    const allocator = std.testing.allocator;
+    const data = "";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.EmptyRequestLine, ret);
 }
