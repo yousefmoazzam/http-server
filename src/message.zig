@@ -29,12 +29,8 @@ pub const Message = struct {
             .GET => "GET",
             .POST => "POST",
         };
-        const request_target = switch (self.request_target) {
-            .OriginForm => |val| val,
-        };
-        const request_target_len = switch (self.request_target) {
-            .OriginForm => |val| val.len,
-        };
+        const request_target = self.request_target.data();
+        const request_target_len = self.request_target.len();
         const request_line_len = method.len + 1 + request_target_len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len;
         var headers_len: usize = 0;
         for (self.headers) |header| {
@@ -154,6 +150,18 @@ const Header = struct {
 /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#request_targets
 const RequestTarget = union(enum) {
     OriginForm: []const u8,
+
+    fn data(self: RequestTarget) []const u8 {
+        switch (self) {
+            .OriginForm => |val| return val,
+        }
+    }
+
+    fn len(self: RequestTarget) usize {
+        switch (self) {
+            .OriginForm => |val| return val.len,
+        }
+    }
 };
 
 test "serialise GET request message" {
