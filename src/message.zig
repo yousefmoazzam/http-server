@@ -8,6 +8,7 @@ const HTTP_STR = "HTTP";
 const DeserialiseError = error{
     EmptyRequestLine,
     InvalidRequestLine,
+    InvalidRequestTarget,
     UnrecognisedMethod,
 };
 
@@ -111,6 +112,9 @@ pub const Message = struct {
         iter.reset();
         const method_str = iter.next().?;
         _ = try Message.parse_method(method_str);
+
+        const request_target = iter.next().?;
+        _ = try Message.parse_request_target(request_target);
         std.debug.panic("TODO", .{});
     }
 
@@ -122,6 +126,11 @@ pub const Message = struct {
         } else {
             return DeserialiseError.UnrecognisedMethod;
         }
+    }
+
+    fn parse_request_target(str: []const u8) DeserialiseError!RequestTarget {
+        if (str[0] != '/') return DeserialiseError.InvalidRequestTarget;
+        std.debug.panic("TODO", .{});
     }
 };
 
@@ -296,4 +305,13 @@ test "return error if unrecognised method" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.UnrecognisedMethod, ret);
+}
+
+test "return error if request target isn't in 'origin form'" {
+    const allocator = std.testing.allocator;
+    const data = "GET users HTTP/1.1";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.InvalidRequestTarget, ret);
 }
