@@ -15,7 +15,7 @@ const DeserialiseError = error{
 pub const Message = struct {
     version: Version,
     method: Method,
-    uri: []const u8,
+    request_target: RequestTarget,
     headers: []const Header,
     body: []const u8,
 
@@ -29,7 +29,13 @@ pub const Message = struct {
             .GET => "GET",
             .POST => "POST",
         };
-        const request_line_len = method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len;
+        const request_target = switch (self.request_target) {
+            .OriginForm => |val| val,
+        };
+        const request_target_len = switch (self.request_target) {
+            .OriginForm => |val| val.len,
+        };
+        const request_line_len = method.len + 1 + request_target_len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len;
         var headers_len: usize = 0;
         for (self.headers) |header| {
             headers_len += header.name.len + COLON_SPACE.len + header.value.len + CLRF.len;
@@ -43,19 +49,19 @@ pub const Message = struct {
 
         @memcpy(slc[0..method.len], method);
         slc[method.len] = ' ';
-        @memcpy(slc[method.len + 1 .. method.len + 1 + self.uri.len], self.uri);
-        slc[method.len + 1 + self.uri.len] = ' ';
+        @memcpy(slc[method.len + 1 .. method.len + 1 + request_target_len], request_target);
+        slc[method.len + 1 + request_target_len] = ' ';
         @memcpy(
-            slc[method.len + 1 + self.uri.len + 1 .. method.len + 1 + self.uri.len + 1 + HTTP_STR.len],
+            slc[method.len + 1 + request_target_len + 1 .. method.len + 1 + request_target_len + 1 + HTTP_STR.len],
             HTTP_STR,
         );
-        slc[method.len + 1 + self.uri.len + 1 + HTTP_STR.len] = '/';
+        slc[method.len + 1 + request_target_len + 1 + HTTP_STR.len] = '/';
         @memcpy(
-            slc[method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 .. method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len],
+            slc[method.len + 1 + request_target_len + 1 + HTTP_STR.len + 1 .. method.len + 1 + request_target_len + 1 + HTTP_STR.len + 1 + version.len],
             version,
         );
         @memcpy(
-            slc[method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len .. method.len + 1 + self.uri.len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len],
+            slc[method.len + 1 + request_target_len + 1 + HTTP_STR.len + 1 + version.len .. method.len + 1 + request_target_len + 1 + HTTP_STR.len + 1 + version.len + CLRF.len],
             CLRF,
         );
 
@@ -142,6 +148,14 @@ const Header = struct {
     value: []const u8,
 };
 
+/// Request target
+///
+/// See the following link for more information on the possible values:
+/// https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#request_targets
+const RequestTarget = union(enum) {
+    OriginForm: []const u8,
+};
+
 test "serialise GET request message" {
     const allocator = std.testing.allocator;
     const version = Version.V1_1;
@@ -156,7 +170,7 @@ test "serialise GET request message" {
     const msg = Message{
         .version = version,
         .method = method,
-        .uri = uri,
+        .request_target = RequestTarget{ .OriginForm = uri },
         .headers = headers[0..],
         .body = body,
     };
@@ -204,7 +218,7 @@ test "serialise POST request message with non-empty body" {
     const msg = Message{
         .version = version,
         .method = method,
-        .uri = uri,
+        .request_target = RequestTarget{ .OriginForm = uri },
         .headers = headers[0..],
         .body = body,
     };
