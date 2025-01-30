@@ -9,6 +9,7 @@ const DeserialiseError = error{
     EmptyRequestLine,
     InvalidRequestLine,
     InvalidRequestTarget,
+    MalformedProtocol,
     UnrecognisedMethod,
 };
 
@@ -115,6 +116,9 @@ pub const Message = struct {
 
         const request_target = iter.next().?;
         _ = try Message.parse_request_target(request_target);
+
+        const protocol_str = iter.next().?;
+        _ = try Message.parse_protocol(protocol_str);
         std.debug.panic("TODO", .{});
     }
 
@@ -130,6 +134,16 @@ pub const Message = struct {
 
     fn parse_request_target(str: []const u8) DeserialiseError!RequestTarget {
         if (str[0] != '/') return DeserialiseError.InvalidRequestTarget;
+        return RequestTarget{ .OriginForm = str };
+    }
+
+    fn parse_protocol(str: []const u8) DeserialiseError!Version {
+        var iter = std.mem.splitSequence(u8, str, "/");
+        var len: usize = 0;
+        while (iter.next()) |_| {
+            len += 1;
+        }
+        if (len != 2) return DeserialiseError.MalformedProtocol;
         std.debug.panic("TODO", .{});
     }
 };
@@ -314,4 +328,13 @@ test "return error if request target isn't in 'origin form'" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.InvalidRequestTarget, ret);
+}
+
+test "return error if missing '/' separator in protocol part of request line" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP-1.1";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.MalformedProtocol, ret);
 }
