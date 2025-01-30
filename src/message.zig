@@ -8,6 +8,7 @@ const HTTP_STR = "HTTP";
 const DeserialiseError = error{
     EmptyRequestLine,
     InvalidRequestLine,
+    UnrecognisedMethod,
 };
 
 /// HTTP message
@@ -104,7 +105,21 @@ pub const Message = struct {
             len += 1;
         }
         if (len != 3) return DeserialiseError.InvalidRequestLine;
+
+        iter.reset();
+        const method_str = iter.next().?;
+        _ = try Message.parse_method(method_str);
         std.debug.panic("TODO", .{});
+    }
+
+    fn parse_method(str: []const u8) DeserialiseError!Method {
+        if (std.mem.eql(u8, str, "GET")) {
+            return Method.GET;
+        } else if (std.mem.eql(u8, str, "POST")) {
+            return Method.POST;
+        } else {
+            return DeserialiseError.UnrecognisedMethod;
+        }
     }
 };
 
@@ -250,4 +265,13 @@ test "return error if request line contains more than three values" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.InvalidRequestLine, ret);
+}
+
+test "return error if unrecognised method" {
+    const allocator = std.testing.allocator;
+    const data = "FOO /users HTTP/1.1\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.UnrecognisedMethod, ret);
 }
