@@ -119,16 +119,11 @@ pub const Message = struct {
         _ = try Method.deserialise(method_str);
 
         const request_target = iter.next().?;
-        _ = try Message.parse_request_target(request_target);
+        _ = try RequestTarget.deserialise(request_target);
 
         const protocol_str = iter.next().?;
         _ = try Message.parse_protocol(protocol_str);
         std.debug.panic("TODO", .{});
-    }
-
-    fn parse_request_target(str: []const u8) DeserialiseError!RequestTarget {
-        if (str[0] != '/') return DeserialiseError.InvalidRequestTarget;
-        return RequestTarget{ .OriginForm = str };
     }
 
     fn parse_protocol(str: []const u8) DeserialiseError!Version {
@@ -195,6 +190,11 @@ const Header = struct {
 /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#request_targets
 const RequestTarget = union(enum) {
     OriginForm: []const u8,
+
+    fn deserialise(str: []const u8) DeserialiseError!RequestTarget {
+        if (str[0] != '/') return DeserialiseError.InvalidRequestTarget;
+        return RequestTarget{ .OriginForm = str };
+    }
 
     fn data(self: RequestTarget) []const u8 {
         switch (self) {
