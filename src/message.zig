@@ -11,6 +11,7 @@ const DeserialiseError = error{
     InvalidRequestLine,
     InvalidRequestTarget,
     MalformedProtocol,
+    MissingLineDelimiter,
     UnrecognisedMethod,
     UnsupportedProtocolVersion,
 };
@@ -113,6 +114,7 @@ pub const Message = struct {
         if (len != 3) return DeserialiseError.InvalidRequestLine;
 
         iter.reset();
+        if (data[data.len - 1] != '\r') return DeserialiseError.MissingLineDelimiter;
         const method_str = iter.next().?;
         _ = try Message.parse_method(method_str);
 
@@ -332,6 +334,15 @@ test "return error if request line contains more than three values" {
     try std.testing.expectError(DeserialiseError.InvalidRequestLine, ret);
 }
 
+test "return error if request line doens't end with CRLF" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.MissingLineDelimiter, ret);
+}
+
 test "return error if unrecognised method" {
     const allocator = std.testing.allocator;
     const data = "FOO /users HTTP/1.1\r\n";
@@ -343,7 +354,7 @@ test "return error if unrecognised method" {
 
 test "return error if request target isn't in 'origin form'" {
     const allocator = std.testing.allocator;
-    const data = "GET users HTTP/1.1";
+    const data = "GET users HTTP/1.1\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
@@ -352,7 +363,7 @@ test "return error if request target isn't in 'origin form'" {
 
 test "return error if missing '/' separator in protocol part of request line" {
     const allocator = std.testing.allocator;
-    const data = "GET /users HTTP-1.1";
+    const data = "GET /users HTTP-1.1\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
@@ -361,7 +372,7 @@ test "return error if missing '/' separator in protocol part of request line" {
 
 test "return error if 'HTTP' not in protocol part of request line" {
     const allocator = std.testing.allocator;
-    const data = "GET /users HTTQ/1.1";
+    const data = "GET /users HTTQ/1.1\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
@@ -370,7 +381,7 @@ test "return error if 'HTTP' not in protocol part of request line" {
 
 test "return error if invalid HTTP protocol version in request line" {
     const allocator = std.testing.allocator;
-    const data = "GET /users HTTP/1.2";
+    const data = "GET /users HTTP/1.2\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
@@ -379,7 +390,7 @@ test "return error if invalid HTTP protocol version in request line" {
 
 test "return error if unsupported HTTP protocol version in request line" {
     const allocator = std.testing.allocator;
-    const data = "GET /users HTTP/2.0";
+    const data = "GET /users HTTP/2.0\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
