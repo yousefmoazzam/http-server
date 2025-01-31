@@ -157,11 +157,11 @@ pub const Message = struct {
 
         // If execution reaches here, the second element can't be `null` either
         const second = iter.next().?;
-        if (std.mem.eql(u8, second, "1.0")) {
+        if (std.mem.eql(u8, second[0 .. second.len - 1], "1.0")) {
             std.debug.panic("TODO", .{});
-        } else if (std.mem.eql(u8, second, "1.1")) {
+        } else if (std.mem.eql(u8, second[0 .. second.len - 1], "1.1")) {
             std.debug.panic("TODO", .{});
-        } else if (std.mem.eql(u8, second, "2.0")) {
+        } else if (std.mem.eql(u8, second[0 .. second.len - 1], "2.0")) {
             return DeserialiseError.UnsupportedProtocolVersion;
         } else {
             return DeserialiseError.InvalidProtocolVersion;
