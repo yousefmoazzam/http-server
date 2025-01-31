@@ -122,11 +122,34 @@ pub const Message = struct {
         _ = try RequestTarget.deserialise(request_target);
 
         const protocol_str = iter.next().?;
-        _ = try Message.parse_protocol(protocol_str);
+        _ = try Version.deserialise(protocol_str);
         std.debug.panic("TODO", .{});
     }
+};
 
-    fn parse_protocol(str: []const u8) DeserialiseError!Version {
+/// HTTP method
+const Method = enum {
+    GET,
+    POST,
+
+    fn deserialise(str: []const u8) DeserialiseError!Method {
+        if (std.mem.eql(u8, str, "GET")) {
+            return Method.GET;
+        } else if (std.mem.eql(u8, str, "POST")) {
+            return Method.POST;
+        } else {
+            return DeserialiseError.UnrecognisedMethod;
+        }
+    }
+};
+
+/// HTTP protocol version
+const Version = enum {
+    V1_0,
+    V1_1,
+    V2_0,
+
+    fn deserialise(str: []const u8) DeserialiseError!Version {
         var iter = std.mem.splitSequence(u8, str, "/");
         var len: usize = 0;
         while (iter.next()) |_| {
@@ -153,29 +176,6 @@ pub const Message = struct {
         }
         std.debug.panic("TODO", .{});
     }
-};
-
-/// HTTP method
-const Method = enum {
-    GET,
-    POST,
-
-    fn deserialise(str: []const u8) DeserialiseError!Method {
-        if (std.mem.eql(u8, str, "GET")) {
-            return Method.GET;
-        } else if (std.mem.eql(u8, str, "POST")) {
-            return Method.POST;
-        } else {
-            return DeserialiseError.UnrecognisedMethod;
-        }
-    }
-};
-
-/// HTTP protocol version
-const Version = enum {
-    V1_0,
-    V1_1,
-    V2_0,
 };
 
 /// HTTP header
