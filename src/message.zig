@@ -7,6 +7,7 @@ const HTTP_STR = "HTTP";
 /// Errors that can occur when deserialising data to `Message`
 const DeserialiseError = error{
     EmptyRequestLine,
+    InvalidProtocolVersion,
     InvalidRequestLine,
     InvalidRequestTarget,
     MalformedProtocol,
@@ -150,6 +151,18 @@ pub const Message = struct {
         // be 2 (and thus the very first element isn't `null`)
         const first = iter.next().?;
         if (!std.mem.eql(u8, first, "HTTP")) return DeserialiseError.MalformedProtocol;
+
+        // If execution reaches here, the second element can't be `null` either
+        const second = iter.next().?;
+        if (std.mem.eql(u8, second, "1.0")) {
+            std.debug.panic("TODO", .{});
+        } else if (std.mem.eql(u8, second, "1.1")) {
+            std.debug.panic("TODO", .{});
+        } else if (std.mem.eql(u8, second, "2.0")) {
+            std.debug.panic("TODO", .{});
+        } else {
+            return DeserialiseError.InvalidProtocolVersion;
+        }
         std.debug.panic("TODO", .{});
     }
 };
@@ -352,4 +365,13 @@ test "return error if 'HTTP' not in protocol part of request line" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.MalformedProtocol, ret);
+}
+
+test "return error if invalid HTTP protocol version in request line" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.2";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.InvalidProtocolVersion, ret);
 }
