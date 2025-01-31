@@ -116,7 +116,7 @@ pub const Message = struct {
         iter.reset();
         if (data[data.len - 1] != '\r') return DeserialiseError.MissingLineDelimiter;
         const method_str = iter.next().?;
-        _ = try Message.parse_method(method_str);
+        _ = try Method.deserialise(method_str);
 
         const request_target = iter.next().?;
         _ = try Message.parse_request_target(request_target);
@@ -124,16 +124,6 @@ pub const Message = struct {
         const protocol_str = iter.next().?;
         _ = try Message.parse_protocol(protocol_str);
         std.debug.panic("TODO", .{});
-    }
-
-    fn parse_method(str: []const u8) DeserialiseError!Method {
-        if (std.mem.eql(u8, str, "GET")) {
-            return Method.GET;
-        } else if (std.mem.eql(u8, str, "POST")) {
-            return Method.POST;
-        } else {
-            return DeserialiseError.UnrecognisedMethod;
-        }
     }
 
     fn parse_request_target(str: []const u8) DeserialiseError!RequestTarget {
@@ -174,6 +164,16 @@ pub const Message = struct {
 const Method = enum {
     GET,
     POST,
+
+    fn deserialise(str: []const u8) DeserialiseError!Method {
+        if (std.mem.eql(u8, str, "GET")) {
+            return Method.GET;
+        } else if (std.mem.eql(u8, str, "POST")) {
+            return Method.POST;
+        } else {
+            return DeserialiseError.UnrecognisedMethod;
+        }
+    }
 };
 
 /// HTTP protocol version
