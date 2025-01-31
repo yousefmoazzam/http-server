@@ -12,6 +12,7 @@ const DeserialiseError = error{
     InvalidRequestTarget,
     MalformedProtocol,
     UnrecognisedMethod,
+    UnsupportedProtocolVersion,
 };
 
 /// HTTP message
@@ -159,7 +160,7 @@ pub const Message = struct {
         } else if (std.mem.eql(u8, second, "1.1")) {
             std.debug.panic("TODO", .{});
         } else if (std.mem.eql(u8, second, "2.0")) {
-            std.debug.panic("TODO", .{});
+            return DeserialiseError.UnsupportedProtocolVersion;
         } else {
             return DeserialiseError.InvalidProtocolVersion;
         }
@@ -374,4 +375,13 @@ test "return error if invalid HTTP protocol version in request line" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.InvalidProtocolVersion, ret);
+}
+
+test "return error if unsupported HTTP protocol version in request line" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/2.0";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.UnsupportedProtocolVersion, ret);
 }
