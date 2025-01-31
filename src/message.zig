@@ -144,6 +144,12 @@ pub const Message = struct {
             len += 1;
         }
         if (len != 2) return DeserialiseError.MalformedProtocol;
+
+        iter.reset();
+        // Unwrapping is safe here because execution reaching here means that the length must
+        // be 2 (and thus the very first element isn't `null`)
+        const first = iter.next().?;
+        if (!std.mem.eql(u8, first, "HTTP")) return DeserialiseError.MalformedProtocol;
         std.debug.panic("TODO", .{});
     }
 };
@@ -333,6 +339,15 @@ test "return error if request target isn't in 'origin form'" {
 test "return error if missing '/' separator in protocol part of request line" {
     const allocator = std.testing.allocator;
     const data = "GET /users HTTP-1.1";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.MalformedProtocol, ret);
+}
+
+test "return error if 'HTTP' not in protocol part of request line" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTQ/1.1";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
