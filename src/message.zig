@@ -101,11 +101,14 @@ pub const Message = struct {
     pub fn deserialise(allocator: std.mem.Allocator, reader: std.io.AnyReader) (DeserialiseError || anyerror)!Message {
         const request_line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100) orelse return DeserialiseError.EmptyRequestLine;
         defer allocator.free(request_line);
-        try validate_request_line(request_line);
+        try validate_request_line(allocator, request_line);
         std.debug.panic("TODO", .{});
     }
 
-    fn validate_request_line(data: []const u8) DeserialiseError!void {
+    fn validate_request_line(
+        allocator: std.mem.Allocator,
+        data: []const u8,
+    ) (DeserialiseError || std.mem.Allocator.Error)!void {
         var len: usize = 0;
         var iter = std.mem.splitSequence(u8, data, " ");
         while (iter.next()) |_| {
@@ -118,8 +121,9 @@ pub const Message = struct {
         const method_str = iter.next().?;
         _ = try Method.deserialise(method_str);
 
-        const request_target = iter.next().?;
-        _ = try RequestTarget.deserialise(request_target);
+        const request_target_str = iter.next().?;
+        const request_target = try RequestTarget.deserialise(allocator, request_target_str);
+        errdefer request_target.free(allocator);
 
         const protocol_str = iter.next().?;
         _ = try Version.deserialise(protocol_str);
@@ -191,9 +195,14 @@ const Header = struct {
 const RequestTarget = union(enum) {
     OriginForm: []const u8,
 
-    fn deserialise(str: []const u8) DeserialiseError!RequestTarget {
+    fn deserialise(
+        alllocator: std.mem.Allocator,
+        str: []const u8,
+    ) (DeserialiseError || std.mem.Allocator.Error)!RequestTarget {
         if (str[0] != '/') return DeserialiseError.InvalidRequestTarget;
-        return RequestTarget{ .OriginForm = str };
+        const slc = try alllocator.alloc(u8, str.len);
+        @memcpy(slc, str);
+        return RequestTarget{ .OriginForm = slc };
     }
 
     fn data(self: RequestTarget) []const u8 {
@@ -205,6 +214,12 @@ const RequestTarget = union(enum) {
     fn len(self: RequestTarget) usize {
         switch (self) {
             .OriginForm => |val| return val.len,
+        }
+    }
+
+    fn free(self: RequestTarget, allocator: std.mem.Allocator) void {
+        switch (self) {
+            .OriginForm => allocator.free(self.OriginForm),
         }
     }
 };
