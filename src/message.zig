@@ -127,17 +127,19 @@ pub const Message = struct {
     pub fn deserialise(
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
-    ) (DeserialiseError || anyerror)!Message {
+    ) (DeserialiseError || anyerror)!*Message {
         const request_line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100) orelse return DeserialiseError.EmptyRequestLine;
         defer allocator.free(request_line);
-        try validate_request_line(allocator, request_line);
-        std.debug.panic("TODO", .{});
+        const message = try validate_request_line(allocator, request_line);
+        message.*.headers = try allocator.alloc(Header, 0);
+        message.*.body = try allocator.alloc(u8, 0);
+        return message;
     }
 
     fn validate_request_line(
         allocator: std.mem.Allocator,
         data: []const u8,
-    ) (DeserialiseError || std.mem.Allocator.Error)!void {
+    ) (DeserialiseError || std.mem.Allocator.Error)!*Message {
         var len: usize = 0;
         var iter = std.mem.splitSequence(u8, data, " ");
         while (iter.next()) |_| {
@@ -148,15 +150,25 @@ pub const Message = struct {
         iter.reset();
         if (data[data.len - 1] != '\r') return DeserialiseError.MissingLineDelimiter;
         const method_str = iter.next().?;
-        _ = try Method.deserialise(method_str);
+        const method = try Method.deserialise(method_str);
 
         const request_target_str = iter.next().?;
         const request_target = try RequestTarget.deserialise(allocator, request_target_str);
         errdefer request_target.free(allocator);
 
         const protocol_str = iter.next().?;
-        _ = try Version.deserialise(protocol_str);
-        std.debug.panic("TODO", .{});
+        const protocol = try Version.deserialise(protocol_str);
+
+        const message = try allocator.create(Message);
+        message.* = Message{
+            .allocator = allocator,
+            .version = protocol,
+            .method = method,
+            .request_target = request_target,
+            .headers = undefined,
+            .body = undefined,
+        };
+        return message;
     }
 };
 
@@ -201,7 +213,7 @@ const Version = enum {
         if (std.mem.eql(u8, second[0 .. second.len - 1], "1.0")) {
             std.debug.panic("TODO", .{});
         } else if (std.mem.eql(u8, second[0 .. second.len - 1], "1.1")) {
-            std.debug.panic("TODO", .{});
+            return Version.V1_1;
         } else if (std.mem.eql(u8, second[0 .. second.len - 1], "2.0")) {
             return DeserialiseError.UnsupportedProtocolVersion;
         } else {
@@ -453,4 +465,42 @@ test "return error if unsupported HTTP protocol version in request line" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.UnsupportedProtocolVersion, ret);
+}
+
+test "correct message produced from valid request line and no header or body" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const message = try Message.deserialise(allocator, reader);
+    defer {
+        message.deinit();
+        allocator.destroy(message);
+    }
+
+    const expected_headers = try allocator.alloc(Header, 0);
+    const expected_body = try allocator.alloc(u8, 0);
+    const expected_uri = "/users";
+    const expected_uri_heap = try allocator.alloc(u8, expected_uri.len);
+    @memcpy(expected_uri_heap, expected_uri);
+    const expected_message = Message.init(
+        allocator,
+        Version.V1_1,
+        Method.GET,
+        RequestTarget{ .OriginForm = expected_uri_heap },
+        expected_headers,
+        expected_body,
+    );
+    defer expected_message.deinit();
+
+    try std.testing.expectEqual(expected_message.version, message.*.version);
+    try std.testing.expectEqual(expected_message.method, message.*.method);
+    try std.testing.expectEqualSlices(Header, expected_message.headers, message.*.headers);
+    try std.testing.expectEqualStrings(expected_message.body, message.*.body);
+    switch (expected_message.request_target) {
+        .OriginForm => try std.testing.expectEqualStrings(
+            expected_message.request_target.data(),
+            message.*.request_target.data(),
+        ),
+    }
 }
