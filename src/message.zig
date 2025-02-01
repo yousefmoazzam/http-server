@@ -98,7 +98,10 @@ pub const Message = struct {
     }
 
     /// Deserialise data from `reader` into `Message`
-    pub fn deserialise(allocator: std.mem.Allocator, reader: std.io.AnyReader) (DeserialiseError || anyerror)!Message {
+    pub fn deserialise(
+        allocator: std.mem.Allocator,
+        reader: std.io.AnyReader,
+    ) (DeserialiseError || anyerror)!Message {
         const request_line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100) orelse return DeserialiseError.EmptyRequestLine;
         defer allocator.free(request_line);
         try validate_request_line(allocator, request_line);
