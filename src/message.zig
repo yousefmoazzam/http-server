@@ -24,6 +24,14 @@ pub const Message = struct {
     headers: []const Header,
     body: []const u8,
 
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: Message) void {
+        self.request_target.free(self.allocator);
+        self.allocator.free(self.headers);
+        self.allocator.free(self.body);
+    }
+
     /// Serialise HTTP message
     pub fn serialise(self: Message, allocator: std.mem.Allocator) std.mem.Allocator.Error![]u8 {
         const version = switch (self.version) {
@@ -232,19 +240,25 @@ test "serialise GET request message" {
     const version = Version.V1_1;
     const method = Method.GET;
     const uri = "/contact";
+    const uri_heap = try allocator.alloc(u8, uri.len);
+    @memcpy(uri_heap, uri);
     const headers = [3]Header{
         Header{ .name = "Host", .value = "example.com" },
         Header{ .name = "User-Agent", .value = "curl/8.6.0" },
         Header{ .name = "Accept", .value = "*/*" },
     };
-    const body = "";
+    const headers_heap = try allocator.alloc(Header, headers.len);
+    @memcpy(headers_heap, &headers);
+    const body_heap = try allocator.alloc(u8, 0);
     const msg = Message{
+        .allocator = allocator,
         .version = version,
         .method = method,
-        .request_target = RequestTarget{ .OriginForm = uri },
-        .headers = headers[0..],
-        .body = body,
+        .request_target = RequestTarget{ .OriginForm = uri_heap },
+        .headers = headers_heap,
+        .body = body_heap,
     };
+    defer msg.deinit();
     const REQUEST_LINE_LEN = 23;
     const HEADER_LINES_LEN = 56;
     var expected_data: [79]u8 = undefined;
@@ -280,19 +294,27 @@ test "serialise POST request message with non-empty body" {
     const version = Version.V1_1;
     const method = Method.POST;
     const uri = "/users";
+    const uri_heap = try allocator.alloc(u8, uri.len);
+    @memcpy(uri_heap, uri);
     const headers = [3]Header{
         Header{ .name = "Host", .value = "example.com" },
         Header{ .name = "Content-Type", .value = "application/x-www-form-urlencoded" },
         Header{ .name = "Content-Length", .value = "50" },
     };
+    const headers_heap = try allocator.alloc(Header, headers.len);
+    @memcpy(headers_heap, &headers);
     const body = "name=FirstName%20LastName&email=bsmth%40example.com";
+    const body_heap = try allocator.alloc(u8, body.len);
+    @memcpy(body_heap, body);
     const msg = Message{
+        .allocator = allocator,
         .version = version,
         .method = method,
-        .request_target = RequestTarget{ .OriginForm = uri },
-        .headers = headers[0..],
-        .body = body,
+        .request_target = RequestTarget{ .OriginForm = uri_heap },
+        .headers = headers_heap,
+        .body = body_heap,
     };
+    defer msg.deinit();
     const REQUEST_LINE_LEN = 22;
     const HEADER_LINES_LEN = 88;
     var expected_data: [REQUEST_LINE_LEN + HEADER_LINES_LEN + 1 + body.len]u8 = undefined;
