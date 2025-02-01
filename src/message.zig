@@ -26,6 +26,24 @@ pub const Message = struct {
 
     allocator: std.mem.Allocator,
 
+    pub fn init(
+        allocator: std.mem.Allocator,
+        version: Version,
+        method: Method,
+        request_target: RequestTarget,
+        headers: []const Header,
+        body: []const u8,
+    ) Message {
+        return Message{
+            .allocator = allocator,
+            .version = version,
+            .method = method,
+            .request_target = request_target,
+            .headers = headers,
+            .body = body,
+        };
+    }
+
     pub fn deinit(self: Message) void {
         self.request_target.free(self.allocator);
         self.allocator.free(self.headers);
@@ -250,14 +268,14 @@ test "serialise GET request message" {
     const headers_heap = try allocator.alloc(Header, headers.len);
     @memcpy(headers_heap, &headers);
     const body_heap = try allocator.alloc(u8, 0);
-    const msg = Message{
-        .allocator = allocator,
-        .version = version,
-        .method = method,
-        .request_target = RequestTarget{ .OriginForm = uri_heap },
-        .headers = headers_heap,
-        .body = body_heap,
-    };
+    const msg = Message.init(
+        allocator,
+        version,
+        method,
+        RequestTarget{ .OriginForm = uri_heap },
+        headers_heap,
+        body_heap,
+    );
     defer msg.deinit();
     const REQUEST_LINE_LEN = 23;
     const HEADER_LINES_LEN = 56;
@@ -306,14 +324,14 @@ test "serialise POST request message with non-empty body" {
     const body = "name=FirstName%20LastName&email=bsmth%40example.com";
     const body_heap = try allocator.alloc(u8, body.len);
     @memcpy(body_heap, body);
-    const msg = Message{
-        .allocator = allocator,
-        .version = version,
-        .method = method,
-        .request_target = RequestTarget{ .OriginForm = uri_heap },
-        .headers = headers_heap,
-        .body = body_heap,
-    };
+    const msg = Message.init(
+        allocator,
+        version,
+        method,
+        RequestTarget{ .OriginForm = uri_heap },
+        headers_heap,
+        body_heap,
+    );
     defer msg.deinit();
     const REQUEST_LINE_LEN = 22;
     const HEADER_LINES_LEN = 88;
