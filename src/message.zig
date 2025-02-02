@@ -10,6 +10,7 @@ const DeserialiseError = error{
     InvalidRequestLine,
     InvalidRequestTarget,
     MalformedProtocol,
+    MissingLineDelimiter,
     UnexpectedEof,
     UnrecognisedMethod,
     UnsupportedProtocolVersion,
@@ -129,7 +130,8 @@ pub const Message = struct {
     ) (DeserialiseError || anyerror)!*Message {
         const request_line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch return DeserialiseError.UnexpectedEof;
         defer allocator.free(request_line);
-        _ = reader.readByte() catch return DeserialiseError.UnexpectedEof;
+        const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
+        if (char != '\n') return DeserialiseError.MissingLineDelimiter;
         const message = try validate_request_line(allocator, request_line);
         message.*.headers = try allocator.alloc(Header, 0);
         message.*.body = try allocator.alloc(u8, 0);
@@ -419,6 +421,15 @@ test "return error if request line ends with CR but not LF" {
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
     try std.testing.expectError(DeserialiseError.UnexpectedEof, ret);
+}
+
+test "return error if char at end of request line after CR isn't LF" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1\ra";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    try std.testing.expectError(DeserialiseError.MissingLineDelimiter, ret);
 }
 
 test "return error if unrecognised method" {
