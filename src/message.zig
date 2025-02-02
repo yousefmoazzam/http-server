@@ -6,12 +6,11 @@ const HTTP_STR = "HTTP";
 
 /// Errors that can occur when deserialising data to `Message`
 const DeserialiseError = error{
-    EmptyRequestLine,
     InvalidProtocolVersion,
     InvalidRequestLine,
     InvalidRequestTarget,
     MalformedProtocol,
-    MissingLineDelimiter,
+    UnexpectedEof,
     UnrecognisedMethod,
     UnsupportedProtocolVersion,
 };
@@ -128,8 +127,9 @@ pub const Message = struct {
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
     ) (DeserialiseError || anyerror)!*Message {
-        const request_line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 100) orelse return DeserialiseError.EmptyRequestLine;
+        const request_line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch return DeserialiseError.UnexpectedEof;
         defer allocator.free(request_line);
+        _ = try reader.readByte();
         const message = try validate_request_line(allocator, request_line);
         message.*.headers = try allocator.alloc(Header, 0);
         message.*.body = try allocator.alloc(u8, 0);
@@ -148,7 +148,6 @@ pub const Message = struct {
         if (len != 3) return DeserialiseError.InvalidRequestLine;
 
         iter.reset();
-        if (data[data.len - 1] != '\r') return DeserialiseError.MissingLineDelimiter;
         const method_str = iter.next().?;
         const method = try Method.deserialise(method_str);
 
@@ -210,11 +209,11 @@ const Version = enum {
 
         // If execution reaches here, the second element can't be `null` either
         const second = iter.next().?;
-        if (std.mem.eql(u8, second[0 .. second.len - 1], "1.0")) {
+        if (std.mem.eql(u8, second, "1.0")) {
             std.debug.panic("TODO", .{});
-        } else if (std.mem.eql(u8, second[0 .. second.len - 1], "1.1")) {
+        } else if (std.mem.eql(u8, second, "1.1")) {
             return Version.V1_1;
-        } else if (std.mem.eql(u8, second[0 .. second.len - 1], "2.0")) {
+        } else if (std.mem.eql(u8, second, "2.0")) {
             return DeserialiseError.UnsupportedProtocolVersion;
         } else {
             return DeserialiseError.InvalidProtocolVersion;
@@ -383,7 +382,7 @@ test "return error if request line is empty" {
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
-    try std.testing.expectError(DeserialiseError.EmptyRequestLine, ret);
+    try std.testing.expectError(DeserialiseError.UnexpectedEof, ret);
 }
 
 test "return error if request line contains less than three values" {
@@ -410,7 +409,7 @@ test "return error if request line doens't end with CRLF" {
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
-    try std.testing.expectError(DeserialiseError.MissingLineDelimiter, ret);
+    try std.testing.expectError(DeserialiseError.UnexpectedEof, ret);
 }
 
 test "return error if unrecognised method" {
