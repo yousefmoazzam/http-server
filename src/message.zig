@@ -133,8 +133,18 @@ pub const Message = struct {
         const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
         if (char != '\n') return DeserialiseError.MissingLineDelimiter;
         const message = try validate_request_line(allocator, request_line);
-        message.*.headers = try allocator.alloc(Header, 0);
-        message.*.body = try allocator.alloc(u8, 0);
+        errdefer {
+            message.*.request_target.free(allocator);
+            allocator.destroy(message);
+        }
+
+        if (try parse_headers(allocator, reader)) |_| {
+            std.debug.panic("TODO", .{});
+        } else {
+            message.*.headers = try allocator.alloc(Header, 0);
+            message.*.body = try allocator.alloc(u8, 0);
+        }
+
         return message;
     }
 
@@ -170,6 +180,17 @@ pub const Message = struct {
             .body = undefined,
         };
         return message;
+    }
+
+    fn parse_headers(
+        allocator: std.mem.Allocator,
+        reader: std.io.AnyReader,
+    ) (DeserialiseError || anyerror)!?void {
+        const line = try reader.readUntilDelimiterAlloc(allocator, '\r', 100);
+        defer allocator.free(line);
+        const char = try reader.readByte();
+        if (char == '\n') return null;
+        std.debug.panic("TODO", .{});
     }
 };
 
@@ -488,7 +509,7 @@ test "return error if unsupported HTTP protocol version in request line" {
 
 test "correct message produced from valid request line and no header or body" {
     const allocator = std.testing.allocator;
-    const data = "GET /users HTTP/1.1\r\n";
+    const data = "GET /users HTTP/1.1\r\n\r\n";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const message = try Message.deserialise(allocator, reader);
@@ -511,6 +532,11 @@ test "correct message produced from valid request line and no header or body" {
         expected_body,
     );
     defer expected_message.deinit();
+
+    var buf: [16]u8 = undefined;
+    @memset(&buf, 0);
+    const leftover = reader.read(buf[0..]);
+    try std.testing.expectEqual(0, leftover);
 
     try std.testing.expectEqual(expected_message.version, message.*.version);
     try std.testing.expectEqual(expected_message.method, message.*.method);
