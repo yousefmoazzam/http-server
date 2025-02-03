@@ -190,7 +190,7 @@ pub const Message = struct {
             return DeserialiseError.UnexpectedEof;
         };
         defer allocator.free(line);
-        const char = try reader.readByte();
+        const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
         if (char == '\n') return null;
         std.debug.panic("TODO", .{});
     }
@@ -555,6 +555,19 @@ test "correct message produced from valid request line and no header or body" {
 test "return error if header doesn't end with CRLF" {
     const allocator = std.testing.allocator;
     const data = "GET /users HTTP/1.1\r\nUser-Agent: curl/7.74.0";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    var buf: [16]u8 = undefined;
+    @memset(&buf, 0);
+    const leftover = reader.read(buf[0..]);
+    try std.testing.expectEqual(0, leftover);
+    try std.testing.expectError(DeserialiseError.UnexpectedEof, ret);
+}
+
+test "return error if header ends with CR but not LF" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1\r\nUser-Agent: curl/7.74.0\r";
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader().any();
     const ret = Message.deserialise(allocator, reader);
