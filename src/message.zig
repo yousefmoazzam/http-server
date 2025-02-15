@@ -128,7 +128,10 @@ pub const Message = struct {
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
     ) (DeserialiseError || anyerror)!*Message {
-        const request_line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch return DeserialiseError.UnexpectedEof;
+        const request_line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch |err| switch (err) {
+            anyerror.EndOfStream => return DeserialiseError.UnexpectedEof,
+            else => std.debug.panic("TODO", .{}),
+        };
         defer allocator.free(request_line);
         const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
         if (char != '\n') return DeserialiseError.MissingLineDelimiter;
