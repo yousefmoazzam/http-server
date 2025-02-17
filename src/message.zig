@@ -123,18 +123,27 @@ pub const Message = struct {
         return slc;
     }
 
+    fn get_line(
+        allocator: std.mem.Allocator,
+        reader: std.io.AnyReader,
+    ) DeserialiseError![]const u8 {
+        const line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch |err| switch (err) {
+            anyerror.EndOfStream => return DeserialiseError.UnexpectedEof,
+            else => std.debug.panic("TODO", .{}),
+        };
+        errdefer allocator.free(line);
+        const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
+        if (char != '\n') return DeserialiseError.MissingLineDelimiter;
+        return line;
+    }
+
     /// Deserialise data from `reader` into `Message`
     pub fn deserialise(
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
     ) (DeserialiseError || anyerror)!*Message {
-        const request_line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch |err| switch (err) {
-            anyerror.EndOfStream => return DeserialiseError.UnexpectedEof,
-            else => std.debug.panic("TODO", .{}),
-        };
+        const request_line = try Message.get_line(allocator, reader);
         defer allocator.free(request_line);
-        const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
-        if (char != '\n') return DeserialiseError.MissingLineDelimiter;
         const message = try validate_request_line(allocator, request_line);
         errdefer {
             message.*.request_target.free(allocator);
@@ -189,13 +198,8 @@ pub const Message = struct {
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
     ) (DeserialiseError || anyerror)!?void {
-        const line = reader.readUntilDelimiterAlloc(allocator, '\r', 100) catch |err| switch (err) {
-            anyerror.EndOfStream => return DeserialiseError.UnexpectedEof,
-            else => std.debug.panic("TODO", .{}),
-        };
+        const line = try Message.get_line(allocator, reader);
         defer allocator.free(line);
-        const char = reader.readByte() catch return DeserialiseError.UnexpectedEof;
-        if (char != '\n') return DeserialiseError.MissingLineDelimiter;
         return null;
     }
 };
