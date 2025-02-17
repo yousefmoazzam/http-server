@@ -10,6 +10,7 @@ const DeserialiseError = error{
     InvalidRequestLine,
     InvalidRequestTarget,
     MalformedProtocol,
+    MalformedHeader,
     MissingLineDelimiter,
     UnexpectedEof,
     UnrecognisedMethod,
@@ -200,7 +201,8 @@ pub const Message = struct {
     ) (DeserialiseError || anyerror)!?void {
         const line = try Message.get_line(allocator, reader);
         defer allocator.free(line);
-        return null;
+        if (std.mem.eql(u8, line, "")) return null;
+        return try Header.deserialise(line);
     }
 };
 
@@ -259,6 +261,14 @@ const Version = enum {
 const Header = struct {
     name: []const u8,
     value: []const u8,
+
+    fn deserialise(str: []const u8) DeserialiseError!void {
+        var parts = std.mem.splitSequence(u8, str, ": ");
+        var len: usize = 0;
+        while (parts.next()) |_| len += 1;
+        if (len != 2) return DeserialiseError.MalformedHeader;
+        std.debug.panic("TODO\n", .{});
+    }
 };
 
 /// Request target
@@ -597,4 +607,17 @@ test "return error if char at end of header line after CR isn't LF" {
     const leftover = reader.read(buf[0..]);
     try std.testing.expectEqual(0, leftover);
     try std.testing.expectError(DeserialiseError.MissingLineDelimiter, ret);
+}
+
+test "return error if header line missing colon char" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1\r\nUser-Agent curl/7.74.0\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const ret = Message.deserialise(allocator, reader);
+    var buf: [16]u8 = undefined;
+    @memset(&buf, 0);
+    const leftover = reader.read(buf[0..]);
+    try std.testing.expectEqual(0, leftover);
+    try std.testing.expectError(DeserialiseError.MalformedHeader, ret);
 }
