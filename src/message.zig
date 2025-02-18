@@ -337,10 +337,28 @@ test "serialise GET request message" {
     const uri = "/contact";
     const uri_heap = try allocator.alloc(u8, uri.len);
     @memcpy(uri_heap, uri);
+    const header_one_name = "Host";
+    const header_one_name_heap = try allocator.alloc(u8, header_one_name.len);
+    @memcpy(header_one_name_heap, header_one_name);
+    const header_one_value = "example.com";
+    const header_one_value_heap = try allocator.alloc(u8, header_one_value.len);
+    @memcpy(header_one_value_heap, header_one_value);
+    const header_two_name = "User-Agent";
+    const header_two_name_heap = try allocator.alloc(u8, header_two_name.len);
+    @memcpy(header_two_name_heap, header_two_name);
+    const header_two_value = "curl/8.6.0";
+    const header_two_value_heap = try allocator.alloc(u8, header_two_value.len);
+    @memcpy(header_two_value_heap, header_two_value);
+    const header_three_name = "Accept";
+    const header_three_name_heap = try allocator.alloc(u8, header_three_name.len);
+    @memcpy(header_three_name_heap, header_three_name);
+    const header_three_value = "*/*";
+    const header_three_value_heap = try allocator.alloc(u8, header_three_value.len);
+    @memcpy(header_three_value_heap, header_three_value);
     const headers = [3]Header{
-        Header{ .name = "Host", .value = "example.com" },
-        Header{ .name = "User-Agent", .value = "curl/8.6.0" },
-        Header{ .name = "Accept", .value = "*/*" },
+        Header{ .name = header_one_name_heap, .value = header_one_value_heap },
+        Header{ .name = header_two_name_heap, .value = header_two_value_heap },
+        Header{ .name = header_three_name_heap, .value = header_three_value_heap },
     };
     const headers_heap = try allocator.alloc(Header, headers.len);
     @memcpy(headers_heap, &headers);
