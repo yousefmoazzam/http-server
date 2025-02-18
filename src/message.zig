@@ -47,6 +47,7 @@ pub const Message = struct {
 
     pub fn deinit(self: Message) void {
         self.request_target.free(self.allocator);
+        for (self.headers) |header| header.deinit(self.allocator);
         self.allocator.free(self.headers);
         self.allocator.free(self.body);
     }
@@ -151,12 +152,12 @@ pub const Message = struct {
             allocator.destroy(message);
         }
 
-        if (try parse_headers(allocator, reader)) |_| {
-            std.debug.panic("TODO", .{});
+        if (try parse_headers(allocator, reader)) |headers| {
+            message.*.headers = headers;
         } else {
             message.*.headers = try allocator.alloc(Header, 0);
-            message.*.body = try allocator.alloc(u8, 0);
         }
+        message.*.body = try allocator.alloc(u8, 0);
 
         return message;
     }
@@ -198,11 +199,16 @@ pub const Message = struct {
     fn parse_headers(
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
-    ) (DeserialiseError || anyerror)!?void {
+    ) (DeserialiseError || anyerror)!?[]Header {
         const line = try Message.get_line(allocator, reader);
         defer allocator.free(line);
         if (std.mem.eql(u8, line, "")) return null;
-        return try Header.deserialise(line);
+        var headers = try allocator.alloc(Header, 1);
+        headers[0] = try Header.deserialise(allocator, line);
+        const next_line = try Message.get_line(allocator, reader);
+        defer allocator.free(next_line);
+        if (std.mem.eql(u8, next_line, "")) return headers;
+        return null;
     }
 };
 
@@ -262,12 +268,29 @@ const Header = struct {
     name: []const u8,
     value: []const u8,
 
-    fn deserialise(str: []const u8) DeserialiseError!void {
+    fn deserialise(
+        allocator: std.mem.Allocator,
+        str: []const u8,
+    ) (DeserialiseError || std.mem.Allocator.Error)!Header {
         var parts = std.mem.splitSequence(u8, str, ": ");
         var len: usize = 0;
         while (parts.next()) |_| len += 1;
         if (len != 2) return DeserialiseError.MalformedHeader;
-        std.debug.panic("TODO\n", .{});
+        parts.reset();
+        // Safe to unwrap as have confirmed the iterator has length 2
+        const name_data = parts.next().?;
+        const name = try allocator.alloc(u8, name_data.len);
+        @memcpy(name, name_data);
+        // Safe to unwrap as have confirmed the iterator has length 2
+        const value_data = parts.next().?;
+        const value = try allocator.alloc(u8, value_data.len);
+        @memcpy(value, value_data);
+        return Header{ .name = name, .value = value };
+    }
+
+    fn deinit(self: Header, allocator: std.mem.Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.value);
     }
 };
 
@@ -620,4 +643,56 @@ test "return error if header line missing colon char" {
     const leftover = reader.read(buf[0..]);
     try std.testing.expectEqual(0, leftover);
     try std.testing.expectError(DeserialiseError.MalformedHeader, ret);
+}
+
+test "correct message with single header" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1\r\nUser-Agent: curl/7.74.0\r\n\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const message = try Message.deserialise(allocator, reader);
+    defer {
+        message.deinit();
+        allocator.destroy(message);
+    }
+
+    const expected_headers = try allocator.alloc(Header, 1);
+    const header_name = "User-Agent";
+    const header_name_heap = try allocator.alloc(u8, header_name.len);
+    @memcpy(header_name_heap, header_name);
+    const header_value = "curl/7.74.0";
+    const header_value_heap = try allocator.alloc(u8, header_value.len);
+    @memcpy(header_value_heap, header_value);
+    expected_headers[0] = Header{ .name = header_name_heap, .value = header_value_heap };
+    const expected_body = try allocator.alloc(u8, 0);
+    const expected_uri = "/users";
+    const expected_uri_heap = try allocator.alloc(u8, expected_uri.len);
+    @memcpy(expected_uri_heap, expected_uri);
+    const expected_message = Message.init(
+        allocator,
+        Version.V1_1,
+        Method.GET,
+        RequestTarget{ .OriginForm = expected_uri_heap },
+        expected_headers,
+        expected_body,
+    );
+    defer expected_message.deinit();
+
+    var buf: [16]u8 = undefined;
+    @memset(&buf, 0);
+    const leftover = reader.read(buf[0..]);
+    try std.testing.expectEqual(0, leftover);
+
+    try std.testing.expectEqual(expected_message.version, message.*.version);
+    try std.testing.expectEqual(expected_message.method, message.*.method);
+    try std.testing.expectEqual(message.*.headers.len, 1);
+    try std.testing.expectEqualSlices(u8, expected_message.headers[0].name, message.*.headers[0].name);
+    try std.testing.expectEqualSlices(u8, expected_message.headers[0].value, message.*.headers[0].value);
+    try std.testing.expectEqualStrings(expected_message.body, message.*.body);
+    switch (expected_message.request_target) {
+        .OriginForm => try std.testing.expectEqualStrings(
+            expected_message.request_target.data(),
+            message.*.request_target.data(),
+        ),
+    }
 }
