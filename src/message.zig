@@ -204,6 +204,7 @@ pub const Message = struct {
         defer allocator.free(line);
         if (std.mem.eql(u8, line, "")) return null;
         var headers = try allocator.alloc(Header, 1);
+        errdefer allocator.free(headers);
         headers[0] = try Header.deserialise(allocator, line);
         const next_line = try Message.get_line(allocator, reader);
         defer allocator.free(next_line);
