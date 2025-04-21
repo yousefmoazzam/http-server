@@ -409,10 +409,27 @@ test "serialise POST request message with non-empty body" {
     const uri = "/users";
     const uri_heap = try allocator.alloc(u8, uri.len);
     @memcpy(uri_heap, uri);
+    const header_one_name = "Host";
+    const header_one_name_heap = try allocator.alloc(u8, header_one_name.len);
+    @memcpy(header_one_name_heap, header_one_name);
+    const header_one_value = "example.com";
+    const header_one_value_heap = try allocator.alloc(u8, header_one_value.len);
+    @memcpy(header_one_value_heap, header_one_value);
+    const header_two_name = "Content-Type";
+    const header_two_name_heap = try allocator.alloc(u8, header_two_name.len);
+    @memcpy(header_two_name_heap, header_two_name);
+    const header_two_value = "application/x-www-form-urlencoded";
+    const header_two_value_heap = try allocator.alloc(u8, header_two_value.len);
+    @memcpy(header_two_value_heap, header_two_value);
+    const header_three_name = "Content-Length";
+    const header_three_name_heap = try allocator.alloc(u8, header_three_name.len);
+    @memcpy(header_three_name_heap, header_three_name);
+    const header_three_value = "50";
+    const header_three_value_heap = try allocator.alloc(u8, header_three_value.len);
     const headers = [3]Header{
-        Header{ .name = "Host", .value = "example.com" },
-        Header{ .name = "Content-Type", .value = "application/x-www-form-urlencoded" },
-        Header{ .name = "Content-Length", .value = "50" },
+        Header{ .name = header_one_name_heap, .value = header_one_value_heap },
+        Header{ .name = header_two_name_heap, .value = header_two_value_heap },
+        Header{ .name = header_three_name_heap, .value = header_three_value_heap },
     };
     const headers_heap = try allocator.alloc(Header, headers.len);
     @memcpy(headers_heap, &headers);
