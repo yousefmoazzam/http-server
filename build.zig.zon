@@ -1,11 +1,12 @@
 .{
-    .name = "http_server",
+    .name = .http_server,
     .version = "0.0.0",
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.0",
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
         "README.md",
     },
+    .fingerprint = 0x411f0d31976a35a7,
 }
