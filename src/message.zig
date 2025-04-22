@@ -199,17 +199,18 @@ pub const Message = struct {
     fn parse_headers(
         allocator: std.mem.Allocator,
         reader: std.io.AnyReader,
-    ) (DeserialiseError || anyerror)!?[]Header {
-        const line = try Message.get_line(allocator, reader);
-        defer allocator.free(line);
-        if (std.mem.eql(u8, line, "")) return null;
-        var headers = try allocator.alloc(Header, 1);
-        errdefer allocator.free(headers);
-        headers[0] = try Header.deserialise(allocator, line);
-        const next_line = try Message.get_line(allocator, reader);
-        defer allocator.free(next_line);
-        if (std.mem.eql(u8, next_line, "")) return headers;
-        return null;
+    ) (DeserialiseError || std.mem.Allocator.Error || anyerror)!?[]Header {
+        var headers = std.ArrayList(Header).init(allocator);
+        errdefer headers.deinit();
+        while (Message.get_line(allocator, reader)) |line| {
+            defer allocator.free(line);
+            if (std.mem.eql(u8, line, "")) {
+                const slc = try headers.toOwnedSlice();
+                if (slc.len == 0) return null;
+                return slc;
+            }
+            try headers.append(try Header.deserialise(allocator, line));
+        } else |err| return err;
     }
 };
 
@@ -724,6 +725,66 @@ test "correct message with single header" {
     try std.testing.expectEqual(message.*.headers.len, 1);
     try std.testing.expectEqualSlices(u8, expected_message.headers[0].name, message.*.headers[0].name);
     try std.testing.expectEqualSlices(u8, expected_message.headers[0].value, message.*.headers[0].value);
+    try std.testing.expectEqualStrings(expected_message.body, message.*.body);
+    switch (expected_message.request_target) {
+        .OriginForm => try std.testing.expectEqualStrings(
+            expected_message.request_target.data(),
+            message.*.request_target.data(),
+        ),
+    }
+}
+
+test "correct message with multiple headers" {
+    const allocator = std.testing.allocator;
+    const data = "GET /users HTTP/1.1\r\nUser-Agent: curl/7.74.0\r\nHost: example.com\r\n\r\n";
+    var stream = std.io.fixedBufferStream(data);
+    const reader = stream.reader().any();
+    const message = try Message.deserialise(allocator, reader);
+    defer {
+        message.deinit();
+        allocator.destroy(message);
+    }
+    const expected_headers = try allocator.alloc(Header, 2);
+    const header_one_name = "User-Agent";
+    const header_one_name_heap = try allocator.alloc(u8, header_one_name.len);
+    @memcpy(header_one_name_heap, header_one_name);
+    const header_one_value = "curl/7.74.0";
+    const header_one_value_heap = try allocator.alloc(u8, header_one_value.len);
+    @memcpy(header_one_value_heap, header_one_value);
+    const header_two_name = "Host";
+    const header_two_name_heap = try allocator.alloc(u8, header_two_name.len);
+    @memcpy(header_two_name_heap, header_two_name);
+    const header_two_value = "example.com";
+    const header_two_value_heap = try allocator.alloc(u8, header_two_value.len);
+    @memcpy(header_two_value_heap, header_two_value);
+    expected_headers[0] = Header{ .name = header_one_name_heap, .value = header_one_value_heap };
+    expected_headers[1] = Header{ .name = header_two_name_heap, .value = header_two_value_heap };
+    const expected_body = try allocator.alloc(u8, 0);
+    const expected_uri = "/users";
+    const expected_uri_heap = try allocator.alloc(u8, expected_uri.len);
+    @memcpy(expected_uri_heap, expected_uri);
+    const expected_message = Message.init(
+        allocator,
+        Version.V1_1,
+        Method.GET,
+        RequestTarget{ .OriginForm = expected_uri_heap },
+        expected_headers,
+        expected_body,
+    );
+    defer expected_message.deinit();
+
+    var buf: [16]u8 = undefined;
+    @memset(&buf, 0);
+    const leftover = reader.read(buf[0..]);
+    try std.testing.expectEqual(0, leftover);
+
+    try std.testing.expectEqual(expected_message.version, message.*.version);
+    try std.testing.expectEqual(expected_message.method, message.*.method);
+    try std.testing.expectEqual(2, message.*.headers.len);
+    try std.testing.expectEqualStrings(expected_message.headers[0].name, message.*.headers[0].name);
+    try std.testing.expectEqualStrings(expected_message.headers[0].value, message.*.headers[0].value);
+    try std.testing.expectEqualStrings(expected_message.headers[1].name, message.*.headers[1].name);
+    try std.testing.expectEqualStrings(expected_message.headers[1].value, message.*.headers[1].value);
     try std.testing.expectEqualStrings(expected_message.body, message.*.body);
     switch (expected_message.request_target) {
         .OriginForm => try std.testing.expectEqualStrings(
